@@ -150,6 +150,12 @@ def test_links_on_unlabeled_records_are_not_errors():
     assert result["precision"] == 1.0 and result["fp"] == 0
 
 
+def test_link_to_a_decoy_counts_against_precision_with_a_gold_subset():
+    entity_of = {**ENTITY_OF, "np9": "E9"}  # E9 has no true links: a namesake decoy
+    result = score_links([("np1", "op1"), ("np9", "op1")], entity_of, gold_pairs={("np1", "op1")})
+    assert result["fp"] == 1 and result["precision"] == 0.5
+
+
 def test_no_predictions_gives_none_precision_not_one():
     result = score_links([], ENTITY_OF)
     assert result["precision"] is None and result["recall"] == 0.0

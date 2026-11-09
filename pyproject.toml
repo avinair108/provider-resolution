@@ -5,11 +5,12 @@ description = "Eval-first agentic RAG over CMS provider datasets with hidden-NPI
 requires-python = ">=3.11"
 dependencies = [
     "duckdb>=2.0",
+    "splink>=5.0,<6",
     "pytest>=8.0",
 ]
 
 [tool.setuptools.packages.find]
-include = ["pipeline*", "evals*"]
+include = ["pipeline*", "evals*", "matching*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

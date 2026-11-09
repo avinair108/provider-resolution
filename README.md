@@ -16,8 +16,8 @@ Spec: [Provider Identity Resolution: Agentic RAG + Eval Plan](https://claude.ai/
 |---|---|
 | 1. Data and gold | Built and validated for Texas and California; hand check round 1 passed (see reports) |
 | 2. Scorers before any LLM | Written and tested on hand-made answers |
-| 3. Splink baseline | Next |
-| 4. Agent, resolver, verifier | Not started |
+| 3. Splink baseline | Texas: 98.0–98.1% of cardiologists' records resolved correctly, vs 84.3% for exact name ([report](reports/phase3_matching_dev_TX.md)) |
+| 4. Agent, resolver, verifier | Next |
 | 5. Cluster review | Not started |
 | 6. Comparison runs and write-up | Not started |
 
@@ -31,6 +31,7 @@ python -m pipeline.download # about 20 GB into data/raw; resumable
 python -m pipeline.build    # scope, strip, gold, slices, perturbations, leak check; one build per state
 python -m pipeline.clean    # dry run; add --yes to delete the raw files
 python -m pipeline.handcheck # score the hand check of 50 gold links against its hidden key
+python -m matching.run      # Phase 3: exact-name baselines and Splink (3 repeats) on Texas -> runs/<run_id>/
 ```
 
 Change the slice in `config/scope.toml`; source files are pinned in `config/sources.toml`.
@@ -78,6 +79,7 @@ The data is public but describes real people, so this stays an eval and not a lo
 ```
 config/          scope.toml (slice), sources.toml (pinned URLs)
 pipeline/        download, build (scope, IDs, gold, slices), perturb, leak, handcheck, clean
+matching/        inputs (standardized, no gold), candidates (blocking, Splink, exact baselines), evaluate (vs gold), run
 evals/
   contract.py    the agent's structured output and the gold item schema
   scorers/       answers (numeric, set, conflict, abstention), process (routing, citations),

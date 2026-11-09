@@ -25,12 +25,12 @@ def _labeled_pairs(pairs: Iterable[Pair], entity_of: Mapping[str, str]) -> set[P
 
 
 def score_links(predicted: Iterable[Pair], entity_of: Mapping[str, str], gold_pairs: set[Pair] | None = None) -> dict:
-    """Pair precision and recall. `gold_pairs` narrows recall to a subset, e.g. one source pair or slice."""
+    """Pair precision and recall. `gold_pairs` narrows recall to a subset, e.g. cross-source pairs only.
+
+    It never narrows precision: a link to a decoy who has no true links is still a false positive. To score one
+    source pair or slice, filter `predicted` before calling."""
     gold = gold_pairs if gold_pairs is not None else true_pairs(entity_of)
     pred = _labeled_pairs(predicted, entity_of)
-    if gold_pairs is not None:
-        allowed = {r for p in gold_pairs for r in p}
-        pred = {p for p in pred if p[0] in allowed and p[1] in allowed}
     tp = sum(entity_of[a] == entity_of[b] for a, b in pred)
     fp = len(pred) - tp
     fn = len(gold - pred)
