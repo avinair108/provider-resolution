@@ -1,0 +1,25 @@
+# Pinned source files. Checked against the CMS catalogs on 2026-11-04.
+# NPPES is a full-replacement monthly file: update the pin deliberately, never silently.
+
+[nppes]
+# The untouched CMS monthly file of 2024-12-09, archived by NBER. CMS keeps only the latest month, and the current
+# file is nearly two years newer than the 2024 activity it would be compared against.
+url = "https://data.nber.org/npi/zip/2024/npi_raw_202412.zip"
+snapshot = "2024-12"
+
+[open_payments_general]
+url = "https://download.cms.gov/openpayments/PGYR2024_P06302026_06032026/OP_DTL_GNRL_PGYR2024_P06302026_06032026.csv"
+program_year = 2024
+published = "2026-06-30"
+
+[open_payments_profiles]
+url = "https://download.cms.gov/openpayments/PHPRFL_P06302026_06032026/OP_CVRD_RCPNT_PRFL_SPLMTL_P06302026_06032026.csv"
+published = "2026-06-30"
+
+[partd_provider]
+url = "https://data.cms.gov/sites/default/files/2026-08/373e45e5-33ec-452c-9302-a4bdbc203459/mup_dpr_ry26_p04_v20_dy24_npi.csv"
+program_year = 2024
+
+[partd_drug]
+url = "https://data.cms.gov/sites/default/files/2026-05/0ae165f4-eb44-495d-8cac-67f4571b6b83/MUP_DPR_RY26_P04_V10_DY24_NPIBN.csv"
+program_year = 2024

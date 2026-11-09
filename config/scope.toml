@@ -1,0 +1,44 @@
+# Phase 1 slice. The candidate pool is every individual provider in the state. Filtering by specialty made matching
+# trivial (few namesakes) and hid about 10% of payments to cardiologists listed under a broader specialty.
+# Sources are never filtered through the NPI: that would give every record a guaranteed match and leak the gold.
+# The lists below define the focus group that questions target; they don't filter the data.
+
+program_year = 2024
+seed = 20261104
+
+[splits]
+dev = ["TX"]      # all tuning happens here
+heldout = ["CA"]  # never used while tuning; each state builds into its own directory
+
+[nppes]
+# NUCC taxonomy codes, matched in any of the 15 taxonomy slots.
+taxonomy_codes = [
+    "207RC0000X",  # Cardiovascular Disease
+    "207RI0011X",  # Interventional Cardiology
+    "207RC0001X",  # Clinical Cardiac Electrophysiology
+    "207RA0001X",  # Advanced Heart Failure and Transplant Cardiology
+    "207RA0002X",  # Adult Congenital Heart Disease
+]
+
+[open_payments]
+# Matched on the last |-separated segment of Covered_Recipient_Specialty_1..6.
+specialties = [
+    "Cardiovascular Disease",
+    "Interventional Cardiology",
+    "Clinical Cardiac Electrophysiology",
+    "Advanced Heart Failure and Transplant Cardiology",
+    "Adult Congenital Heart Disease",
+]
+
+[part_d]
+prescriber_types = [
+    "Cardiology",
+    "Interventional Cardiology",
+    "Clinical Cardiac Electrophysiology",
+    "Cardiac Electrophysiology",
+    "Advanced Heart Failure and Transplant Cardiology",
+    "Adult Congenital Heart Disease",
+]
+
+[perturbations]
+per_type = 200

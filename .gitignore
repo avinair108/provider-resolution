@@ -1,0 +1,10 @@
+# Real provider data never enters the repo: download scripts only (see README guardrails).
+data/
+runs/
+.cache/
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+*.parquet
+*.duckdb
