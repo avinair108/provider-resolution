@@ -17,7 +17,7 @@ Spec: [Provider Identity Resolution: Agentic RAG + Eval Plan](https://claude.ai/
 | 1. Data and gold | Built and validated for Texas and California; hand check round 1 passed (see reports) |
 | 2. Scorers before any LLM | Written and tested on hand-made answers |
 | 3. Splink baseline | Texas: 98.0–98.1% of cardiologists' records resolved correctly, vs 84.3% for exact name ([report](reports/phase3_matching_dev_TX.md)) |
-| 4. Agent, resolver, verifier | Next |
+| 4. Agent, resolver, verifier | LLM adjudicator on Splink's uncertain band, with a verifier and one repair. Texas evaluation partial (279 of 1,909 records; paused on the free tier's daily token cap) |
 | 5. Cluster review | Not started |
 | 6. Comparison runs and write-up | Not started |
 
@@ -32,6 +32,11 @@ python -m pipeline.build    # scope, strip, gold, slices, perturbations, leak ch
 python -m pipeline.clean    # dry run; add --yes to delete the raw files
 python -m pipeline.handcheck # score the hand check of 50 gold links against its hidden key
 python -m matching.run      # Phase 3: exact-name baselines and Splink (3 repeats) on Texas -> runs/<run_id>/
+python -m pipeline.reference   # NUCC taxonomy names for prompts -> data/reference/
+cp .env.example .env           # then paste GROQ_API_KEY (free tier) into .env
+python -m llm.check            # confirms the key and the model in config/llm.toml
+python -m adjudicate.run --subset tune --limit 50 --profile small   # iterate on the prompt
+python -m adjudicate.run --subset eval                              # Phase 4 number; rerun to resume after the daily cap
 ```
 
 Change the slice in `config/scope.toml`; source files are pinned in `config/sources.toml`.
@@ -77,9 +82,11 @@ The data is public but describes real people, so this stays an eval and not a lo
 ## Layout
 
 ```
-config/          scope.toml (slice), sources.toml (pinned URLs)
-pipeline/        download, build (scope, IDs, gold, slices), perturb, leak, handcheck, clean
+config/          scope.toml (slice), sources.toml (pinned URLs), llm.toml (model profiles; keys live in .env)
+pipeline/        download, build (scope, IDs, gold, slices), perturb, leak, handcheck, clean, reference (NUCC names)
 matching/        inputs (standardized, no gold), candidates (blocking, Splink, exact baselines), evaluate (vs gold), run
+llm/             one call path: leak gate, request-keyed disk cache, live-call budget; providers/ (groq, fake)
+adjudicate/      select (uncertain band, no gold), prompt, verify (claims vs records, one repair), run (scores vs Phase 3)
 evals/
   contract.py    the agent's structured output and the gold item schema
   scorers/       answers (numeric, set, conflict, abstention), process (routing, citations),

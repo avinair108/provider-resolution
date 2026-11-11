@@ -10,7 +10,7 @@ dependencies = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["pipeline*", "evals*", "matching*"]
+include = ["pipeline*", "evals*", "matching*", "llm*", "adjudicate*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
