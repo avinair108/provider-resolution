@@ -162,3 +162,51 @@ def test_groq_json_validation_failure_comes_back_as_a_bad_answer():
 def test_error_text_hides_the_organization_id():
     from llm.providers.groq import _snippet
     assert "org_abc123" not in _snippet(b'{"error": "limit for organization `org_abc123` reached"}')
+
+
+def test_openrouter_pins_one_host_and_reads_charged_cost(tmp_path):
+    from llm.providers import OpenRouterProvider
+    provider = OpenRouterProvider("k", host="deepinfra", quantization="bf16", sleep=lambda s: None)
+    body = json.dumps({"model": "openai/gpt-oss-120b", "provider": "DeepInfra",
+                       "choices": [{"message": {"content": '{"a": 1}'}, "finish_reason": "stop"}],
+                       "usage": {"prompt_tokens": 10, "completion_tokens": 3, "cost": 0.0000123}}).encode()
+    sent = []
+    provider._http = lambda method, path, b=None: (sent.append(b), (200, {}, body))[1]
+    llm = LLM(provider, model="openai/gpt-oss-120b", cache=Cache(tmp_path), prices=(100.0, 100.0))
+    r = llm.complete(llm.request("u", json=True, effort="low"))
+    routing = sent[0]["provider"]
+    assert routing == {"order": ["deepinfra"], "allow_fallbacks": False, "require_parameters": True, "quantizations": ["bf16"]}
+    assert sent[0]["reasoning"]["effort"] == "low" and "reasoning_effort" not in sent[0]
+    assert r.meta["served_by"] == "DeepInfra" and llm.stats["cost_usd"] == pytest.approx(0.0000123)  # charged, not estimated
+    assert provider.name == "openrouter:deepinfra/bf16"  # the host is in every cache key
+
+
+def test_openrouter_out_of_credit_stops_the_run():
+    from llm.providers import OpenRouterProvider
+    provider = OpenRouterProvider("k", host="deepinfra")
+    provider._http = lambda method, path, b=None: (402, {}, b'{"error": "Insufficient credits"}')
+    with pytest.raises(QuotaExhausted):
+        provider.send(Request(model="m", user="u"))
+
+
+def test_parallel_calls_respect_the_budget_exactly(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    llm, provider = make_llm(tmp_path, max_live_calls=20)
+
+    def call(i):
+        try:
+            return llm.complete(llm.request(f"prompt {i}"))
+        except BudgetExceeded:
+            return None
+
+    with ThreadPoolExecutor(8) as pool:
+        results = list(pool.map(call, range(50)))
+    assert sum(r is not None for r in results) == 20 == len(provider.calls) == llm.stats["live_calls"]
+
+
+def test_openrouter_omits_parameters_the_host_rejects():
+    from llm.providers import OpenRouterProvider
+    provider = OpenRouterProvider("k", host="anthropic", omit=["temperature", "seed"])
+    body = provider.payload(Request(model="anthropic/claude-haiku-5.5", user="u", json=True, effort="low", sample=2))
+    assert "temperature" not in body and "seed" not in body
+    assert body["response_format"] == {"type": "json_object"} and body["provider"]["order"] == ["anthropic"]

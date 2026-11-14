@@ -31,3 +31,49 @@ price_input_per_mtok = 0.0
 price_output_per_mtok = 0.0
 cache_dir = ".cache/llm"
 usage_log = ".cache/llm/usage.jsonl"
+
+# OpenRouter profiles: one host and precision each, no fallbacks, so reruns hit the same deployment.
+# Prices are estimates for planning; the client records what OpenRouter actually charged.
+[or-120b]
+provider = "openrouter"
+model = "openai/gpt-oss-120b"
+host = "deepinfra"
+quantization = "bf16"
+temperature = 0.0
+max_tokens = 2048
+effort = "low"
+max_live_calls = 20000
+price_input_per_mtok = 0.037
+price_output_per_mtok = 0.17
+cache_dir = ".cache/llm"
+usage_log = ".cache/llm/usage.jsonl"
+
+[or-20b]
+provider = "openrouter"
+model = "openai/gpt-oss-20b"
+host = "deepinfra"
+quantization = "bf16"
+temperature = 0.0
+max_tokens = 2048
+effort = "low"
+max_live_calls = 20000
+price_input_per_mtok = 0.03
+price_output_per_mtok = 0.14
+cache_dir = ".cache/llm"
+usage_log = ".cache/llm/usage.jsonl"
+
+# Claude through OpenRouter, pinned to Anthropic's own endpoint. Anthropic's endpoint takes no temperature or seed,
+# so they're left out of the request (they stay in the cache key). Repeats differ by candidate order only.
+[or-haiku]
+provider = "openrouter"
+model = "anthropic/claude-haiku-5.5"
+host = "anthropic"
+omit = ["temperature", "seed"]
+temperature = 0.0
+max_tokens = 2048
+effort = "low"
+max_live_calls = 20000
+price_input_per_mtok = 0.10
+price_output_per_mtok = 0.50
+cache_dir = ".cache/llm"
+usage_log = ".cache/llm/usage.jsonl"

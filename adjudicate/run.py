@@ -11,7 +11,9 @@ Decisions are made before gold is loaded; thresholds come from the Phase 3 run, 
 import argparse
 import hashlib
 import json
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
@@ -106,6 +108,7 @@ def main() -> None:
     parser.add_argument("--limit", type=int)
     parser.add_argument("--repeats", type=int, default=1)
     parser.add_argument("--show-scores", action="store_true", help="ablation: show Splink scores to the model")
+    parser.add_argument("--workers", type=int, default=1, help="parallel requests; keep 1 on rate-limited free tiers")
     parser.add_argument("--tag", default="")
     args = parser.parse_args()
     if args.split != "dev":
@@ -133,32 +136,40 @@ def main() -> None:
     print(f"Band [{args.band[0]}, {args.band[1]}) subset {args.subset}: {len(items):,} records. Baseline {baseline.name}.", flush=True)
 
     llm = LLM.from_config(args.profile)
-    all_decisions, stopped = {}, None
+    all_decisions, stop = {}, threading.Event()
+    stopped = None
     t0 = time.time()
-    for sample in range(args.repeats):
-        decisions = []
-        for n, item in enumerate(items, 1):
-            if stopped:
-                decisions.append({"record_id": item["record_id"], "sample": sample, "status": "not_run"})
-                continue
-            cands = {c["registry"]: registry[c["registry"]] for c in item["candidates"]}
-            try:
-                decisions.append(adjudicate(llm, item, sources[item["record_id"]], cands, sample, args.show_scores))
-            except ProviderError as e:  # one record's request failed for good: record it, keep going
-                if isinstance(e, QuotaExhausted):
+    done = [0]
+    lock = threading.Lock()
+
+    def run_one(item: dict, sample: int) -> dict:
+        nonlocal stopped
+        if stop.is_set():
+            return {"record_id": item["record_id"], "sample": sample, "status": "not_run"}
+        cands = {c["registry"]: registry[c["registry"]] for c in item["candidates"]}
+        try:
+            decision = adjudicate(llm, item, sources[item["record_id"]], cands, sample, args.show_scores)
+        except (QuotaExhausted, BudgetExceeded) as e:
+            with lock:
+                if not stop.is_set():
                     stopped = f"{type(e).__name__}: {e}"
-                    print(f"Stopped at record {n} of sample {sample}: {stopped}. Rerun the same command to resume from cache.", flush=True)
-                    decisions.append({"record_id": item["record_id"], "sample": sample, "status": "not_run"})
-                else:
-                    print(f"  record {n}: {str(e)[:160]}", flush=True)
-                    decisions.append({"record_id": item["record_id"], "sample": sample, "status": "error", "problems": str(e)[:300]})
-            except BudgetExceeded as e:
-                stopped = f"{type(e).__name__}: {e}"
-                print(f"Stopped at record {n} of sample {sample}: {stopped}. Rerun the same command to resume from cache.", flush=True)
-                decisions.append({"record_id": item["record_id"], "sample": sample, "status": "not_run"})
-            if n % 50 == 0:
+                    print(f"Stopped in sample {sample}: {stopped}. Rerun the same command to resume from cache.", flush=True)
+                stop.set()
+            return {"record_id": item["record_id"], "sample": sample, "status": "not_run"}
+        except ProviderError as e:  # one record's request failed for good: record it, keep going
+            print(f"  {item['record_id'][:3]} record failed: {str(e)[:160]}", flush=True)
+            decision = {"record_id": item["record_id"], "sample": sample, "status": "error", "problems": str(e)[:300]}
+        with lock:
+            done[0] += 1
+            if done[0] % 100 == 0:
                 s = llm.stats
-                print(f"  sample {sample}: {n}/{len(items)}  live {s['live_calls']}  cached {s['cache_hits']}  {time.time() - t0:.0f}s", flush=True)
+                print(f"  {done[0]}/{len(items) * args.repeats}  live {s['live_calls']}  cached {s['cache_hits']}  "
+                      f"${s['cost_usd']:.3f}  {time.time() - t0:.0f}s", flush=True)
+        return decision
+
+    for sample in range(args.repeats):
+        with ThreadPoolExecutor(max_workers=args.workers) as pool:
+            decisions = list(pool.map(lambda item: run_one(item, sample), items))  # map keeps input order
         all_decisions[sample] = decisions
         with (out / f"decisions_{sample}.jsonl").open("w") as f:
             for d in decisions:
@@ -181,7 +192,7 @@ def main() -> None:
                "band": args.band, "profile": args.profile,
                "prompt_sha": hashlib.sha256(prompt.SYSTEM.encode()).hexdigest()[:12], "show_scores": args.show_scores, "repeats": args.repeats,
                "n_band": len(items), "stopped": stopped, "thresholds": {"record": record_t, "pair": pair_t},
-               "llm": llm.summary(), "wall_s": round(time.time() - t0, 1),
+               "llm": llm.summary(), "workers": args.workers, "wall_s": round(time.time() - t0, 1),
                "process": [process_metrics(d, gold_registry, focus_of) for d in all_decisions.values()],
                "band_accuracy": {"splink": {"all": _acc(splink_band, False), "focus": _acc(splink_band, True)},
                                  "splink_llm": [{"all": _acc(b, False), "focus": _acc(b, True)} for b in band_results]},
