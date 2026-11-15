@@ -35,9 +35,12 @@ def main() -> None:
         if missing:
             raise SystemExit(1)
         credit = provider.credit()
-        if credit:
-            print(f"Key works. Credit used ${credit['usage'] or 0:.4f}" +
-                  (f", remaining ${credit['limit_remaining']:.2f}" if credit.get("limit_remaining") is not None else ""))
+        if credit and "account_remaining" in credit:
+            line = (f"Key works. Account credit ${credit['account_credit']:.2f}, used ${credit['account_used']:.2f}, "
+                    f"left ${credit['account_remaining']:.2f}")
+            if credit.get("key_limit") is not None:
+                line += f" (this key is also capped at ${credit['key_limit']:.0f})"
+            print(line + ".")
     elif hasattr(provider, "list_models"):
         models = provider.list_models()
         print(f"Key works. {len(models)} models available on {provider.name}.")

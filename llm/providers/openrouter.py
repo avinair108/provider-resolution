@@ -68,8 +68,16 @@ class OpenRouterProvider(OpenAICompatible):
         return out
 
     def credit(self) -> dict | None:
+        """Account balance (/credits) and this key's own spending cap (/key). The cap is not money in the account."""
+        out = {}
+        status, _, raw = self._http("GET", "/credits")
+        if status == 200:
+            data = json.loads(raw).get("data", {})
+            total, used = data.get("total_credits"), data.get("total_usage")
+            if total is not None and used is not None:
+                out.update(account_credit=float(total), account_used=float(used), account_remaining=float(total) - float(used))
         status, _, raw = self._http("GET", "/key")
-        if status != 200:
-            return None
-        data = json.loads(raw).get("data", {})
-        return {k: data.get(k) for k in ("usage", "limit", "limit_remaining")}
+        if status == 200:
+            data = json.loads(raw).get("data", {})
+            out.update(key_limit=data.get("limit"), key_limit_remaining=data.get("limit_remaining"))
+        return out or None

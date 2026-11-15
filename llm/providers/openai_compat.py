@@ -79,6 +79,11 @@ class OpenAICompatible:
             if status == 200:
                 data = json.loads(raw)
                 if "error" in data and not data.get("choices"):  # some routers report upstream errors with 200
+                    if "failed to generate json" in json.dumps(data["error"]).lower():
+                        # The upstream JSON mode rejected the model's output: a bad answer, for the repair step.
+                        failed = (data["error"].get("metadata") or {}).get("raw") or ""
+                        return Response(text=str(failed), provider=self.name, model=request.model, input_tokens=0,
+                                        output_tokens=0, latency_s=round(latency, 3), finish_reason="json_validate_failed")
                     if attempt == self.max_retries:
                         raise ProviderError(f"{self.label} upstream error: {_snippet(raw)}")
                     self.sleep(min(2 ** attempt, self.max_wait_s))

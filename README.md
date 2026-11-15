@@ -17,7 +17,7 @@ Spec: [Provider Identity Resolution: Agentic RAG + Eval Plan](https://claude.ai/
 | 1. Data and gold | Built and validated for Texas and California; hand check round 1 passed (see reports) |
 | 2. Scorers before any LLM | Written and tested on hand-made answers |
 | 3. Splink baseline | Texas: 98.0–98.1% of cardiologists' records resolved correctly, vs 84.3% for exact name ([report](reports/phase3_matching_dev_TX.md)) |
-| 4. Agent, resolver, verifier | Texas: on the uncertain band, cardiologists' records go from 86.2% (Splink) to 95.0–95.9% with Claude Haiku 5.5 ($2.02) and 94.3–94.8% with gpt-oss-120b ($0.41), over 3 repeats; 98.0% to 98.7–98.8% across all cardiologists ([Haiku](reports/phase4_adjudicate_dev_TX_haiku.md), [gpt-oss](reports/phase4_adjudicate_dev_TX_gpt-oss-120b.md)). California not yet scored |
+| 4. Agent, resolver, verifier | Texas: on the uncertain band, cardiologists' records go from 86.2% (Splink) to 95.0–95.9% with Claude Haiku 5.5 ($2.02), 95.4–95.6% with gpt-oss-120b on Groq ($1.18) and 94.3–94.8% with the same model on DeepInfra ($0.41), over 3 repeats; 98.0% to 98.7–98.8% across all cardiologists ([Haiku](reports/phase4_adjudicate_dev_TX_haiku.md), [gpt-oss on Groq](reports/phase4_adjudicate_dev_TX_gpt-oss-120b-groq.md), [gpt-oss on DeepInfra](reports/phase4_adjudicate_dev_TX_gpt-oss-120b.md)). California not yet scored |
 | 5. Cluster review | Not started |
 | 6. Comparison runs and write-up | Not started |
 

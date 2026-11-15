@@ -108,6 +108,7 @@ def main() -> None:
     parser.add_argument("--limit", type=int)
     parser.add_argument("--repeats", type=int, default=1)
     parser.add_argument("--show-scores", action="store_true", help="ablation: show Splink scores to the model")
+    parser.add_argument("--max-cost", type=float, help="dollar cap for this run's live calls (default: the profile's)")
     parser.add_argument("--workers", type=int, default=1, help="parallel requests; keep 1 on rate-limited free tiers")
     parser.add_argument("--tag", default="")
     args = parser.parse_args()
@@ -135,7 +136,7 @@ def main() -> None:
     registry = _rows(con, "src_nppes", sorted({c["registry"] for i in items for c in i["candidates"]}))
     print(f"Band [{args.band[0]}, {args.band[1]}) subset {args.subset}: {len(items):,} records. Baseline {baseline.name}.", flush=True)
 
-    llm = LLM.from_config(args.profile)
+    llm = LLM.from_config(args.profile, **({"max_cost_usd": args.max_cost} if args.max_cost is not None else {}))
     all_decisions, stop = {}, threading.Event()
     stopped = None
     t0 = time.time()

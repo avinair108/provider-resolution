@@ -210,3 +210,35 @@ def test_openrouter_omits_parameters_the_host_rejects():
     body = provider.payload(Request(model="anthropic/claude-haiku-5.5", user="u", json=True, effort="low", sample=2))
     assert "temperature" not in body and "seed" not in body
     assert body["response_format"] == {"type": "json_object"} and body["provider"]["order"] == ["anthropic"]
+
+
+def test_openrouter_credit_reports_account_balance_not_key_cap():
+    from llm.providers import OpenRouterProvider
+    provider = OpenRouterProvider("k", host="deepinfra")
+    replies = {"/credits": json.dumps({"data": {"total_credits": 10, "total_usage": 3.5}}).encode(),
+               "/key": json.dumps({"data": {"limit": 100, "limit_remaining": 96.5}}).encode()}
+    provider._http = lambda method, path, b=None: (200, {}, replies[path])
+    c = provider.credit()
+    assert c["account_remaining"] == pytest.approx(6.5) and c["key_limit"] == 100
+
+
+def test_routed_json_failure_is_a_bad_answer_not_an_error():
+    from llm.providers import OpenRouterProvider
+    provider = OpenRouterProvider("k", host="groq", sleep=lambda s: None)
+    body = json.dumps({"error": {"message": "Upstream error from Groq: Failed to generate JSON. Please adjust your prompt."}}).encode()
+    provider._http = lambda method, path, b=None: (200, {}, body)
+    r = provider.send(Request(model="m", user="u", json=True))
+    assert r.finish_reason == "json_validate_failed"
+    with pytest.raises(ValueError):
+        r.parsed()
+
+
+def test_dollar_cap_stops_live_calls_but_not_cached_ones(tmp_path):
+    llm, provider = make_llm(tmp_path, prices=(1e6, 0.0), max_cost_usd=2.5)  # $1 per input token: easy arithmetic
+    for i in range(3):
+        llm.complete(llm.request("abcd"))       # 1 input token: $1; the repeats are cached and free
+    llm.complete(llm.request("efgh"))           # $2 spent
+    llm.complete(llm.request("ijkl"))           # still under the cap when sent: $3 spent
+    with pytest.raises(BudgetExceeded, match="max_cost_usd"):
+        llm.complete(llm.request("mnop"))
+    assert llm.complete(llm.request("abcd")).cached and len(provider.calls) == 3

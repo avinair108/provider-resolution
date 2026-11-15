@@ -5,7 +5,7 @@
     r.parsed()
 
 Order matters. The leak check runs before the cache, so a prompt carrying an NPI-like value fails even if a response
-is cached. The budget counts live calls only: cached responses are free and never refused.
+is cached. The budgets (live calls, dollars) count live calls only: cached responses are free and never refused.
 """
 
 import json
@@ -24,11 +24,13 @@ CONFIG = ROOT / "config" / "llm.toml"
 
 class LLM:
     def __init__(self, provider, model: str, cache: Cache | None = None, max_live_calls: int | None = None,
+                 max_cost_usd: float | None = None,
                  defaults: dict | None = None, prices: tuple[float, float] = (0.0, 0.0), usage_log: Path | None = None):
         self.provider = provider
         self.model = model
         self.cache = cache
         self.max_live_calls = max_live_calls
+        self.max_cost_usd = max_cost_usd  # dollars of live calls per run; cached answers cost nothing
         self.defaults = defaults or {}
         self.prices = prices  # $ per 1M input and output tokens; 0 on the free tier
         self.usage_log = usage_log
@@ -46,6 +48,7 @@ class LLM:
             model=settings["model"],
             cache=Cache(ROOT / settings.get("cache_dir", ".cache/llm")),
             max_live_calls=settings.get("max_live_calls"),
+            max_cost_usd=settings.get("max_cost_usd"),
             defaults={k: settings[k] for k in ("max_tokens", "temperature", "effort") if k in settings},
             prices=(settings.get("price_input_per_mtok", 0.0), settings.get("price_output_per_mtok", 0.0)),
             usage_log=ROOT / settings["usage_log"] if settings.get("usage_log") else None,
@@ -68,6 +71,9 @@ class LLM:
                 return hit
             if self.max_live_calls is not None and self.stats["live_calls"] >= self.max_live_calls:
                 raise BudgetExceeded(f"{self.max_live_calls} live calls used this run (max_live_calls)")
+            if self.max_cost_usd is not None and self.stats["cost_usd"] >= self.max_cost_usd:
+                # Checked before each live call, so the overshoot is at most the calls already in flight.
+                raise BudgetExceeded(f"${self.stats['cost_usd']:.2f} spent this run, cap ${self.max_cost_usd:.2f} (max_cost_usd)")
             self.stats["live_calls"] += 1  # counted when attempted, so parallel workers can't overshoot the cap
         response = self.provider.send(request)
         if self.cache:
