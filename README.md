@@ -18,7 +18,7 @@ Spec: [Provider Identity Resolution: Agentic RAG + Eval Plan](https://claude.ai/
 | 2. Scorers before any LLM | Written and tested on hand-made answers |
 | 3. Splink baseline | Texas: 98.0–98.1% of cardiologists' records resolved correctly, vs 84.3% for exact name ([report](reports/phase3_matching_dev_TX.md)) |
 | 4. Agent, resolver, verifier | Texas: on the uncertain band, cardiologists' records go from 86.2% (Splink) to 95.0–95.9% with Claude Haiku 5.5 ($2.02), 95.4–95.6% with gpt-oss-120b on Groq ($1.18) and 94.3–94.8% with the same model on DeepInfra ($0.41), over 3 repeats; 98.0% to 98.7–98.8% across all cardiologists ([Haiku](reports/phase4_adjudicate_dev_TX_haiku.md), [gpt-oss on Groq](reports/phase4_adjudicate_dev_TX_gpt-oss-120b-groq.md), [gpt-oss on DeepInfra](reports/phase4_adjudicate_dev_TX_gpt-oss-120b.md)). California not yet scored |
-| 5. Cluster review | Not started |
+| 5. Identity graph and cluster review | Lightweight graph (Parquet + DuckDB views, no server): Texas cardiologists' B-cubed F1 98.00% with Splink alone, 98.35% with the LLM; registry attachment 98.02% to 98.92% ([report](reports/phase5_graph_dev_TX.md)) |
 | 6. Comparison runs and write-up | Not started |
 
 ## Setup
@@ -37,6 +37,10 @@ cp .env.example .env           # then paste GROQ_API_KEY (free tier) into .env
 python -m llm.check            # confirms the key and the model in config/llm.toml
 python -m adjudicate.run --subset tune --limit 50 --profile small   # iterate on the prompt
 python -m adjudicate.run --subset eval                              # Phase 4 number; rerun to resume after the daily cap
+python -m adjudicate.compare --tags <run tags>   # one table across runs (ablations, models, hosts)
+python -m graph.build --no-llm && python -m graph.build   # identity graphs -> data/<split>/<state>/graph*/
+python -m graph.evaluate        # entity-level metrics vs gold
+python -m graph.query --last SMITH --city AUSTIN   # local lookups; prints real names, keep output out of the repo
 ```
 
 Change the slice in `config/scope.toml`; source files are pinned in `config/sources.toml`.
@@ -87,6 +91,7 @@ pipeline/        download, build (scope, IDs, gold, slices), perturb, leak, hand
 matching/        inputs (standardized, no gold), candidates (blocking, Splink, exact baselines), evaluate (vs gold), run
 llm/             one call path: leak gate, request-keyed disk cache, live-call budget; providers/ (groq, fake)
 adjudicate/      select (uncertain band, no gold), prompt, verify (claims vs records, one repair), run (scores vs Phase 3)
+graph/           build (links with provenance, entities; no gold), views (find_entities, entity_profile), query, evaluate (vs gold)
 evals/
   contract.py    the agent's structured output and the gold item schema
   scorers/       answers (numeric, set, conflict, abstention), process (routing, citations),
