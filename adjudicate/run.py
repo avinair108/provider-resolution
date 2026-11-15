@@ -34,12 +34,15 @@ def _rows(con, table: str, ids: list[str]) -> dict[str, dict]:
     return {r[0]: dict(zip(cols, r)) for r in cur.fetchall()}
 
 
-def adjudicate(llm: LLM, item: dict, source_row: dict, candidate_rows: dict, sample: int, show_scores: bool) -> dict:
-    user, mapping = prompt.render(item, source_row, candidate_rows, sample=sample, show_scores=show_scores)
+def adjudicate(llm: LLM, item: dict, source_row: dict, candidate_rows: dict, sample: int, show_scores: bool,
+               order: str = "shuffled", repair: bool = True) -> dict:
+    """One record. repair=False is the no-verifier ablation: the first reply stands unless it's unusable (bad JSON
+    or a choice that isn't on the list); contradictions with the records are recorded but not acted on."""
+    user, mapping = prompt.render(item, source_row, candidate_rows, sample=sample, show_scores=show_scores, order=order)
     out = {"record_id": item["record_id"], "sample": sample, "n_candidates": len(mapping), "attempts": 0,
            "cached": True, "input_tokens": 0, "output_tokens": 0}
     message, verdict = user, None
-    for attempt in range(2):  # the first answer, then at most one repair
+    for attempt in range(2 if repair else 1):  # the first answer, then at most one repair
         response = llm.complete(llm.request(user=message, system=prompt.SYSTEM, json=True, sample=sample))
         out["attempts"] += 1
         out["cached"] &= response.cached
@@ -55,10 +58,11 @@ def adjudicate(llm: LLM, item: dict, source_row: dict, candidate_rows: dict, sam
             out["first_try_ok"] = verdict.ok
             out["first_errors"] = verdict.errors
             out["first_contradictions"] = verdict.contradictions
-        if verdict.ok:
+        if verdict.ok or not repair:
             break
         message = verify.repair_message(user, response.text, verdict)
-    out.update(status="decided" if verdict.ok else "fallback", choice=verdict.choice, registry=verdict.registry,
+    usable = verdict.ok if repair else not verdict.errors
+    out.update(status="decided" if usable else "fallback", choice=verdict.choice, registry=verdict.registry,
                confidence=verdict.confidence, reason=verdict.reason, evidence=verdict.evidence,
                problems=verdict.problems(), letter_rank={k: [c["registry"] for c in item["candidates"]].index(v)
                                                          for k, v in mapping.items()})
@@ -108,6 +112,9 @@ def main() -> None:
     parser.add_argument("--limit", type=int)
     parser.add_argument("--repeats", type=int, default=1)
     parser.add_argument("--show-scores", action="store_true", help="ablation: show Splink scores to the model")
+    parser.add_argument("--order", default="shuffled", choices=prompt.ORDERS, help="ablation: candidate order")
+    parser.add_argument("--no-repair", action="store_true", help="ablation: no verifier-driven repair")
+    parser.add_argument("--effort", help="override the profile's reasoning effort (low | medium | high)")
     parser.add_argument("--max-cost", type=float, help="dollar cap for this run's live calls (default: the profile's)")
     parser.add_argument("--workers", type=int, default=1, help="parallel requests; keep 1 on rate-limited free tiers")
     parser.add_argument("--tag", default="")
@@ -136,7 +143,9 @@ def main() -> None:
     registry = _rows(con, "src_nppes", sorted({c["registry"] for i in items for c in i["candidates"]}))
     print(f"Band [{args.band[0]}, {args.band[1]}) subset {args.subset}: {len(items):,} records. Baseline {baseline.name}.", flush=True)
 
-    llm = LLM.from_config(args.profile, **({"max_cost_usd": args.max_cost} if args.max_cost is not None else {}))
+    overrides = {**({"max_cost_usd": args.max_cost} if args.max_cost is not None else {}),
+                 **({"effort": args.effort} if args.effort else {})}
+    llm = LLM.from_config(args.profile, **overrides)
     all_decisions, stop = {}, threading.Event()
     stopped = None
     t0 = time.time()
@@ -149,7 +158,8 @@ def main() -> None:
             return {"record_id": item["record_id"], "sample": sample, "status": "not_run"}
         cands = {c["registry"]: registry[c["registry"]] for c in item["candidates"]}
         try:
-            decision = adjudicate(llm, item, sources[item["record_id"]], cands, sample, args.show_scores)
+            decision = adjudicate(llm, item, sources[item["record_id"]], cands, sample, args.show_scores,
+                                  order=args.order, repair=not args.no_repair)
         except (QuotaExhausted, BudgetExceeded) as e:
             with lock:
                 if not stop.is_set():
@@ -191,7 +201,8 @@ def main() -> None:
 
     summary = {"run_id": run_id, "baseline": baseline.name, "split": args.split, "state": args.state, "subset": args.subset,
                "band": args.band, "profile": args.profile,
-               "prompt_sha": hashlib.sha256(prompt.SYSTEM.encode()).hexdigest()[:12], "show_scores": args.show_scores, "repeats": args.repeats,
+               "prompt_sha": hashlib.sha256(prompt.SYSTEM.encode()).hexdigest()[:12], "show_scores": args.show_scores, "order": args.order,
+               "repair": not args.no_repair, "effort": llm.defaults.get("effort"), "repeats": args.repeats,
                "n_band": len(items), "stopped": stopped, "thresholds": {"record": record_t, "pair": pair_t},
                "llm": llm.summary(), "workers": args.workers, "wall_s": round(time.time() - t0, 1),
                "process": [process_metrics(d, gold_registry, focus_of) for d in all_decisions.values()],

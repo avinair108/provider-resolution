@@ -87,21 +87,29 @@ def candidate_card(letter: str, row: dict, p: float | None = None) -> str:
     return "\n".join(lines)
 
 
-def letter_order(record_id: str, n: int, sample: int) -> list[int]:
-    """Which candidate (by Splink rank) each letter shows. Seeded by record and sample, so stable and cacheable."""
+ORDERS = ("shuffled", "splink", "reversed")
+
+
+def letter_order(record_id: str, n: int, sample: int, mode: str = "shuffled") -> list[int]:
+    """Which candidate (by Splink rank) each letter shows. "shuffled" (the method) is seeded by record and sample, so
+    stable and cacheable; "splink" (A = Splink's top) and "reversed" (Splink's top last) are position-bias ablations."""
     order = list(range(n))
-    random.Random(int(hashlib.md5(f"{record_id}:{sample}".encode()).hexdigest(), 16)).shuffle(order)
+    if mode == "shuffled":
+        random.Random(int(hashlib.md5(f"{record_id}:{sample}".encode()).hexdigest(), 16)).shuffle(order)
+    elif mode == "reversed":
+        order.reverse()
+    elif mode != "splink":
+        raise ValueError(f"order must be one of {ORDERS}")
     return order
 
 
 def render(item: dict, source_row: dict, candidate_rows: dict[str, dict], sample: int = 0,
-           show_scores: bool = False) -> tuple[str, dict[str, str]]:
+           show_scores: bool = False, order: str = "shuffled") -> tuple[str, dict[str, str]]:
     """User message and the letter -> registry record mapping."""
     source = "open_payments" if item["record_id"].startswith("op_") else "part_d"
     cands = item["candidates"]
-    order = letter_order(item["record_id"], len(cands), sample)
     mapping, cards = {}, []
-    for letter, idx in zip(LETTERS, order):
+    for letter, idx in zip(LETTERS, letter_order(item["record_id"], len(cands), sample, order)):
         cand = cands[idx]
         mapping[letter] = cand["registry"]
         cards.append(candidate_card(letter, candidate_rows[cand["registry"]], cand["p"] if show_scores else None))

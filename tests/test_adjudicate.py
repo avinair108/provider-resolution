@@ -120,3 +120,20 @@ def test_agent_modules_never_read_gold(module):
     assert not [s for s in strings if any(t in s.lower() for t in GOLD_TOKENS)]
     modules = {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)}
     assert not modules & {"matching.evaluate", "pipeline.build"}
+
+
+def test_order_ablations():
+    assert prompt.letter_order("op_x", 4, 0, "splink") == [0, 1, 2, 3]
+    assert prompt.letter_order("op_x", 4, 0, "reversed") == [3, 2, 1, 0]
+    _, mapping = prompt.render(ITEM, SOURCE, ROWS, order="reversed")
+    assert mapping == {"A": "np_b", "B": "np_a"}
+
+
+def test_no_repair_keeps_a_contradicted_first_answer():
+    reply = json.dumps({"choice": "B", "confidence": 0.9, "evidence": [{"field": "zip", "relation": "same"}]})
+    _, mapping = prompt.render(ITEM, SOURCE, ROWS, order="splink")  # B = np_b, whose ZIP differs
+    llm = LLM(FakeProvider(lambda r: reply), model="m")
+    d = adjudicate(llm, ITEM, SOURCE, ROWS, sample=0, show_scores=False, order="splink", repair=False)
+    assert d["status"] == "decided" and d["registry"] == "np_b" and d["attempts"] == 1 and d["first_contradictions"]
+    d = adjudicate(llm, ITEM, SOURCE, ROWS, sample=0, show_scores=False, order="splink", repair=True)
+    assert d["status"] == "fallback" and d["attempts"] == 2
