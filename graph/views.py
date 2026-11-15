@@ -15,6 +15,8 @@ def register(con, graph: Path, stripped: Path) -> None:
     con.execute(f"CREATE OR REPLACE VIEW links AS SELECT * FROM read_parquet('{graph / 'graph_links.parquet'}')")
     con.execute(f"CREATE OR REPLACE VIEW payments AS SELECT * FROM read_parquet('{stripped / 'open_payments_payments.parquet'}')")
     con.execute(f"CREATE OR REPLACE VIEW drugs AS SELECT * FROM read_parquet('{stripped / 'part_d_drugs.parquet'}')")
+    # Totals come from the prescriber-level file: CMS drops drug rows under 11 claims, so drug rows undercount (~14%).
+    con.execute(f"CREATE OR REPLACE VIEW prescribers AS SELECT * FROM read_parquet('{stripped / 'part_d_prescribers.parquet'}')")
     con.execute(f"""
         CREATE OR REPLACE VIEW members AS
         SELECT e.entity_id, e.record_id, e.source, e.joined_by, r.last_name, r.first_name, r.middle, r.credential,
@@ -36,8 +38,8 @@ def register(con, graph: Path, stripped: Path) -> None:
         CREATE OR REPLACE VIEW entity_summary AS
         WITH pay AS (SELECT e.entity_id, sum(p.amount_usd) AS paid_usd, count(*) AS n_payments
                      FROM payments p JOIN entities e USING (record_id) GROUP BY 1),
-        rx AS (SELECT e.entity_id, sum(d.total_claims) AS claims, sum(d.total_drug_cost) AS drug_cost
-               FROM drugs d JOIN entities e USING (record_id) GROUP BY 1)
+        rx AS (SELECT e.entity_id, sum(p.total_claims) AS claims, sum(p.total_drug_cost) AS drug_cost
+               FROM prescribers p JOIN entities e USING (record_id) GROUP BY 1)
         SELECT m.entity_id,
                coalesce(any_value(m.last_name) FILTER (WHERE m.source = 'nppes'), any_value(m.last_name)) AS last_name,
                coalesce(any_value(m.first_name) FILTER (WHERE m.source = 'nppes'), any_value(m.first_name)) AS first_name,
@@ -57,13 +59,18 @@ def _dicts(cur) -> list[dict]:
 
 
 def find_entities(con, last_name: str, first_name: str | None = None, city: str | None = None, limit: int = 20) -> list[dict]:
-    """Entities with a member record matching the name (and city), most-connected first. Exact, case-insensitive."""
-    where, params = ["upper(m.last_name) = upper(?)"], [last_name]
+    """Entities with a member record matching the name (and city), most-connected first.
+
+    Surnames compare on letters only (GARCIA-LOPEZ = Garcia Lopez); first names on their first word, so "Leslie"
+    finds a record stored as "LESLIE AMMABEL". Cities compare on letters only. Case never matters."""
+    letters = "regexp_replace(upper({}), '[^A-Z]', '', 'g')"
+    first_word = "regexp_replace(split_part(upper(trim({})), ' ', 1), '[^A-Z]', '', 'g')"
+    where, params = [f"{letters.format('m.last_name')} = {letters.format('?')}"], [last_name]
     if first_name:
-        where.append("upper(m.first_name) = upper(?)")
+        where.append(f"{first_word.format('m.first_name')} = {first_word.format('?')}")
         params.append(first_name)
     if city:
-        where.append("upper(m.city) = upper(?)")
+        where.append(f"{letters.format('m.city')} = {letters.format('?')}")
         params.append(city)
     return _dicts(con.execute(f"""
         SELECT s.* FROM entity_summary s

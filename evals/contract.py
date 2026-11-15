@@ -30,6 +30,7 @@ class AgentOutput:
     providers: list[str] = field(default_factory=list)  # record IDs for set answers
     abstained: bool = False
     conflict_records: list[str] = field(default_factory=list)  # records the answer reports as disagreeing
+    evidence_records: list[str] = field(default_factory=list)  # records the answer says it relies on
     sources_queried: list[str] = field(default_factory=list)
     links: list[Pair] = field(default_factory=list)  # every cross-source link the answer relies on
     claims: list[Claim] = field(default_factory=list)

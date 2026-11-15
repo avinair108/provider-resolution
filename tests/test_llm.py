@@ -242,3 +242,11 @@ def test_dollar_cap_stops_live_calls_but_not_cached_ones(tmp_path):
     with pytest.raises(BudgetExceeded, match="max_cost_usd"):
         llm.complete(llm.request("mnop"))
     assert llm.complete(llm.request("abcd")).cached and len(provider.calls) == 3
+
+
+def test_routed_json_validation_wording_is_also_a_bad_answer():
+    from llm.providers import OpenRouterProvider
+    provider = OpenRouterProvider("k", host="groq", sleep=lambda s: None)
+    body = json.dumps({"error": {"message": "Upstream error from Groq: Failed to validate JSON. Please adjust your prompt.", "code": 502}}).encode()
+    provider._http = lambda method, path, b=None: (200, {}, body)
+    assert provider.send(Request(model="m", user="u", json=True)).finish_reason == "json_validate_failed"

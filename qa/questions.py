@@ -1,7 +1,11 @@
 """Generate the question set for one state, with gold answers from the hidden-NPI truth.
 
-  python -m qa.questions                       # Texas dev -> data/dev/TX/questions/questions.jsonl
+  python -m qa.questions                       # Texas dev, the reported set -> data/dev/TX/questions/questions.jsonl
+  python -m qa.questions --set tune            # a separate set for iterating on the agent -> questions_tune.jsonl
   python -m qa.questions --split heldout --state CA
+
+The tune set uses another seed and leaves out every provider (and question) in the reported set, so prompt changes
+are judged on questions the final number never sees.
 
 Gold answers join records by their true provider (gold membership), never through the graph, so a linkage mistake
 in the graph shows up as a wrong answer. Questions name real providers, so the output stays in data/ (git-ignored);
@@ -293,13 +297,32 @@ GENERATORS = {"single_source": single_source, "cross_source": cross_source, "mul
               "conflict": conflict, "unanswerable": unanswerable, "decoy": decoy}
 
 
-def generate(con, state: str, split: str, seed: int) -> list[GoldItem]:
+def _balanced(items: list[GoldItem], k: int) -> list[GoldItem]:
+    """Take k items, alternating across answer kinds, so trimming an oversized pool keeps the mix."""
+    groups: dict[str, list[GoldItem]] = {}
+    for i in items:
+        groups.setdefault(i.answer_kind, []).append(i)
+    out, queues = [], list(groups.values())
+    while len(out) < k and any(queues):
+        for q in queues:
+            if q and len(out) < k:
+                out.append(q.pop(0))
+    return out
+
+
+def generate(con, state: str, split: str, seed: int, name: str = "eval", exclude: list[GoldItem] = ()) -> list[GoldItem]:
+    """`exclude`: items of another set whose providers and questions this set must not reuse."""
+    banned_entities = {e for x in exclude for e in [x.subject_entity, x.gold_conflict_entity, *x.gold_entities] if e}
+    banned_questions = {x.question for x in exclude}
     items = []
     for qtype, k in TARGETS.items():
-        rng = random.Random(f"{seed}:{state}:{qtype}")
-        made = GENERATORS[qtype](con, rng, state, k)
+        rng = random.Random(f"{seed}:{state}:{qtype}" + ("" if name == "eval" else f":{name}"))
+        made = [i for i in GENERATORS[qtype](con, rng, state, k + (k if exclude else 0))
+                if i.question not in banned_questions and not ({i.subject_entity, i.gold_conflict_entity, *i.gold_entities} & banned_entities)]
+        made = _balanced(made, k)
+        prefix = state if name == "eval" else f"{state}-{name}"
         for i, item in enumerate(made, 1):
-            item.id, item.split = f"{state}-{qtype}-{i:02d}", split
+            item.id, item.split = f"{prefix}-{qtype}-{i:02d}", split
         items += made
     return items
 
@@ -323,19 +346,26 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--split", default="dev")
     parser.add_argument("--state", default="TX")
+    parser.add_argument("--set", default="eval", choices=["eval", "tune"])
     args = parser.parse_args()
     scope = tomllib.loads((ROOT / "config" / "scope.toml").read_text())
     data = ROOT / "data" / args.split / args.state
     con = duckdb.connect()
     load(con, data, scope)
-    items = generate(con, args.state, args.split, scope["seed"])
     out = data / "questions"
     out.mkdir(exist_ok=True)
-    with (out / "questions.jsonl").open("w") as f:
+    exclude = []
+    if args.set != "eval":
+        from qa.run import load_questions
+        exclude = load_questions(out / "questions.jsonl")
+    items = generate(con, args.state, args.split, scope["seed"], args.set, exclude)
+    path = out / ("questions.jsonl" if args.set == "eval" else f"questions_{args.set}.jsonl")
+    with path.open("w") as f:
         for item in items:
             f.write(json.dumps(asdict(item)) + "\n")
     text = report(items, args.state, args.split)
-    (ROOT / "reports" / f"questions_{args.split}_{args.state}.md").write_text(text)
+    if args.set == "eval":
+        (ROOT / "reports" / f"questions_{args.split}_{args.state}.md").write_text(text)
     print(text)
     short = {t: TARGETS[t] - sum(1 for i in items if i.question_type == t) for t in TARGETS}
     if any(short.values()):

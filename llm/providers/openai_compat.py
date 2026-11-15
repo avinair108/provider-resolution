@@ -55,8 +55,15 @@ class OpenAICompatible:
         return body
 
     def response_meta(self, data: dict, usage: dict) -> dict:
-        return {**{k: data[k] for k in ("id", "system_fingerprint") if data.get(k)},
+        meta = {**{k: data[k] for k in ("id", "system_fingerprint") if data.get(k)},
                 "reasoning_tokens": (usage.get("completion_tokens_details") or {}).get("reasoning_tokens")}
+        # Some hosts lift a model's native tool-call output into tool_calls even when no tools were offered
+        # (Groq does this for gpt-oss), leaving the text empty. Keep it, so the caller can still use it.
+        calls = ((data.get("choices") or [{}])[0].get("message") or {}).get("tool_calls") or []
+        if calls:
+            meta["tool_calls"] = [{"name": (c.get("function") or {}).get("name"), "arguments": (c.get("function") or {}).get("arguments")}
+                                  for c in calls]
+        return meta
 
     def out_of_quota(self, status: int, raw: bytes) -> str | None:
         """A reason to stop the run (not retry), or None."""
@@ -79,7 +86,7 @@ class OpenAICompatible:
             if status == 200:
                 data = json.loads(raw)
                 if "error" in data and not data.get("choices"):  # some routers report upstream errors with 200
-                    if "failed to generate json" in json.dumps(data["error"]).lower():
+                    if re.search(r"failed to (generate|validate) json", json.dumps(data["error"]).lower()):
                         # The upstream JSON mode rejected the model's output: a bad answer, for the repair step.
                         failed = (data["error"].get("metadata") or {}).get("raw") or ""
                         return Response(text=str(failed), provider=self.name, model=request.model, input_tokens=0,

@@ -36,10 +36,10 @@ def state(tmp_path):
         ) t(record_id, last_name, first_name, middle_name, address_1, city, zip, specialties))
         TO '{s / 'open_payments_recipients.parquet'}' (FORMAT parquet)""")
     con.execute(f"""COPY (SELECT * FROM (VALUES
-        ('pd_1', 'SMITH', 'JOHN', 'A', 'MD', '1 MAIN ST', 'AUSTIN', '78701', 'Cardiology'),
-        ('pd_2', 'DOE', 'ANN', NULL, 'MD', '5 ELM', 'DALLAS', '75201', 'Internal Medicine'),
-        ('pd_3', 'SMITH', 'JANE', NULL, 'MD', '9 OAK AVE', 'AUSTIN', '78702', 'Internal Medicine')
-        ) t(record_id, last_name, first_name, middle_initial, credential, address_1, city, zip, prescriber_type))
+        ('pd_1', 'SMITH', 'JOHN', 'A', 'MD', '1 MAIN ST', 'AUSTIN', '78701', 'Cardiology', 20.0, 200.0),
+        ('pd_2', 'DOE', 'ANN', NULL, 'MD', '5 ELM', 'DALLAS', '75201', 'Internal Medicine', 15.0, 150.0),
+        ('pd_3', 'SMITH', 'JANE', NULL, 'MD', '9 OAK AVE', 'AUSTIN', '78702', 'Internal Medicine', 40.0, 400.0)
+        ) t(record_id, last_name, first_name, middle_initial, credential, address_1, city, zip, prescriber_type, total_claims, total_drug_cost))
         TO '{s / 'part_d_prescribers.parquet'}' (FORMAT parquet)""")
     con.execute(f"""COPY (SELECT * FROM (VALUES ('op_1', 'ACME', 100.0), ('op_1', 'ACME', 50.0), ('op_2', 'BETA', 10.0)) t(record_id, payer, amount_usd))
         TO '{s / 'open_payments_payments.parquet'}' (FORMAT parquet)""")
@@ -85,7 +85,7 @@ def test_lookups(state):
     views.register(q, tmp_path / "graph", tmp_path / "stripped")
     found = views.find_entities(q, "smith", first_name="jane")
     assert len(found) == 1 and found[0]["n_records"] == 3 and found[0]["in_registry"]
-    assert found[0]["paid_usd"] == 150.0 and found[0]["part_d_claims"] == 30.0
+    assert found[0]["paid_usd"] == 150.0 and found[0]["part_d_claims"] == 40.0  # prescriber-level total, not the 30 in drug rows
     profile = views.entity_profile(q, found[0]["entity_id"])
     assert profile["top_payers"][0]["payer"] == "ACME" and profile["top_drugs"][0]["drug"] == "xamine"
     assert {r["source"] for r in profile["records"]} == {"nppes", "open_payments", "part_d"}
