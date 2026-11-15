@@ -52,3 +52,6 @@ class GoldItem:
     required_links: list[Pair] = field(default_factory=list)
     slices: list[str] = field(default_factory=list)
     split: str = "dev"  # dev | heldout
+    subject_entity: str | None = None  # the gold entity the question is about, if one
+    disagreeing_records: list[str] = field(default_factory=list)  # conflict answers: records whose values differ
+    notes: str = ""  # why the gold answer is what it is (e.g. "3 providers share this name")
