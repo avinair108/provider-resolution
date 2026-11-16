@@ -22,6 +22,24 @@ ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / "config" / "llm.toml"
 
 
+def project_capped(run_cap: float | None, provider, budget: dict) -> float | None:
+    """The run's dollar cap, lowered to what's left of the project cap ([budget] project_cap_usd in config/llm.toml).
+
+    Spent-so-far comes from the provider's account (OpenRouter /credits), so it counts every run, past and parallel,
+    not only this process. A provider that can't report spend (free tiers, the fake) leaves the run cap as it is."""
+    cap = budget.get("project_cap_usd")
+    credit = getattr(provider, "credit", None)
+    if cap is None or credit is None:
+        return run_cap
+    info = credit() or {}
+    if "account_used" not in info:
+        return run_cap
+    left = max(0.0, float(cap) - info["account_used"])
+    if left <= 0:
+        raise BudgetExceeded(f"project cap ${cap:.2f} reached (${info['account_used']:.2f} spent on this account)")
+    return left if run_cap is None else min(run_cap, left)
+
+
 class LLM:
     def __init__(self, provider, model: str, cache: Cache | None = None, max_live_calls: int | None = None,
                  max_cost_usd: float | None = None,
@@ -42,13 +60,15 @@ class LLM:
     def from_config(cls, profile: str = "default", path: Path = CONFIG, provider=None, **overrides) -> "LLM":
         from llm.providers import make
 
-        settings = {**tomllib.loads(path.read_text())[profile], **overrides}
+        config = tomllib.loads(path.read_text())
+        settings = {**config[profile], **overrides}
+        provider = provider or make(settings)
         return cls(
-            provider=provider or make(settings),
+            provider=provider,
             model=settings["model"],
             cache=Cache(ROOT / settings.get("cache_dir", ".cache/llm")),
             max_live_calls=settings.get("max_live_calls"),
-            max_cost_usd=settings.get("max_cost_usd"),
+            max_cost_usd=project_capped(settings.get("max_cost_usd"), provider, config.get("budget", {})),
             defaults={k: settings[k] for k in ("max_tokens", "temperature", "effort") if k in settings},
             prices=(settings.get("price_input_per_mtok", 0.0), settings.get("price_output_per_mtok", 0.0)),
             usage_log=ROOT / settings["usage_log"] if settings.get("usage_log") else None,

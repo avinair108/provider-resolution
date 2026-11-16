@@ -14,13 +14,13 @@ Spec: [Provider Identity Resolution: Agentic RAG + Eval Plan](https://claude.ai/
 
 | Phase | State |
 |---|---|
-| 1. Data and gold | Built and validated for Texas and California; hand check round 1 passed (see reports) |
+| 1. Data and gold | Built and validated for Texas and California; hand check round 1 passed |
 | 2. Scorers before any LLM | Written and tested on hand-made answers |
-| 3. Splink baseline | Texas: 98.0–98.1% of cardiologists' records resolved correctly, vs 84.3% for exact name ([report](reports/phase3_matching_dev_TX.md)) |
-| 4. Agent, resolver, verifier | Texas: on the uncertain band, cardiologists' records go from 86.2% (Splink) to 95.0–95.9% with Claude Haiku 5.5 ($2.02), 95.4–95.6% with gpt-oss-120b on Groq ($1.18) and 94.3–94.8% with the same model on DeepInfra ($0.41), over 3 repeats; 98.0% to 98.7–98.8% across all cardiologists ([Haiku](reports/phase4_adjudicate_dev_TX_haiku.md), [gpt-oss on Groq](reports/phase4_adjudicate_dev_TX_gpt-oss-120b-groq.md), [gpt-oss on DeepInfra](reports/phase4_adjudicate_dev_TX_gpt-oss-120b.md)). California not yet scored |
-| 5. Identity graph and cluster review | Lightweight graph (Parquet + DuckDB views, no server): Texas cardiologists' B-cubed F1 98.00% with Splink alone, 98.35% with the LLM; registry attachment 98.02% to 98.92% ([report](reports/phase5_graph_dev_TX.md)) |
-| 5b. Question answering over the graph | Texas: 90–92% of 60 held-back questions over 3 repeats (gpt-oss-120b, $0.04); 100% on ambiguous, unanswerable, conflict and cross-source; failures split 9 graph / 8 agent ([report](reports/qa_dev_TX.md)) |
-| 6. Comparison runs and write-up | Not started |
+| 3. Splink baseline | Cardiologists' records: 98.0% Texas, 97.7% California (held out), vs 84.3% / 80.2% for exact name |
+| 4. LLM adjudicator, verifier | Frozen on Texas (gpt-oss-120b, medium effort): 98.8% Texas, **99.0% California**; uncertain band 79.9% to 93.6–94.2% in California. Supervised classifier baseline: 98.9% California |
+| 5. Identity graph | Parquet + DuckDB views, no server. Cardiologists' B-cubed F1 98.87% and registry attachment 99.02% in California |
+| 5b. Questions over the graph | 60 per state x 3 repeats: 90–92% Texas, **95–97% California**; failures mostly graph splits |
+| 6. Comparison runs and write-up | **[Results summary](reports/summary.md)**; write-up next |
 
 ## Setup
 

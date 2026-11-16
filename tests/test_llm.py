@@ -250,3 +250,18 @@ def test_routed_json_validation_wording_is_also_a_bad_answer():
     body = json.dumps({"error": {"message": "Upstream error from Groq: Failed to validate JSON. Please adjust your prompt.", "code": 502}}).encode()
     provider._http = lambda method, path, b=None: (200, {}, body)
     assert provider.send(Request(model="m", user="u", json=True)).finish_reason == "json_validate_failed"
+
+
+def test_project_cap_lowers_the_run_cap_and_stops_at_zero():
+    from llm.client import project_capped
+
+    class Account:
+        def __init__(self, used): self.used = used
+        def credit(self): return {"account_used": self.used}
+
+    assert project_capped(3.0, Account(18.5), {"project_cap_usd": 20}) == pytest.approx(1.5)
+    assert project_capped(None, Account(5.0), {"project_cap_usd": 20}) == pytest.approx(15.0)
+    assert project_capped(3.0, Account(5.0), {}) == 3.0                   # no project cap set
+    assert project_capped(3.0, FakeProvider(), {"project_cap_usd": 20}) == 3.0  # provider can't report spend
+    with pytest.raises(BudgetExceeded, match="project cap"):
+        project_capped(3.0, Account(20.0), {"project_cap_usd": 20})

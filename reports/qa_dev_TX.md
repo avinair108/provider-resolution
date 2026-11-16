@@ -1,6 +1,6 @@
 # Question answering (dev TX, eval set)
 
-Run `20261115-163812_qa_dev_TX_eval_eval_v1`: 60 questions × 3 repeat(s); model `openai/gpt-oss-120b` (openrouter:deepinfra/bf16, effort medium, agent prompt `f93e50e4892f`) over graph `graph`. Ranges over repeats. Aggregates only.
+Run `20261115-171456_qa_dev_TX_eval_frozen`: 60 questions × 3 repeat(s); model `openai/gpt-oss-120b` (openrouter:deepinfra/bf16, effort medium, agent prompt `f93e50e4892f`) over graph `graph`. Ranges over repeats. Aggregates only.
 
 | Question type | Pass rate |
 |---|---|
@@ -17,7 +17,7 @@ Run `20261115-163812_qa_dev_TX_eval_eval_v1`: 60 questions × 3 repeat(s); model
 |---|---|
 | Abstained when it should (unanswerable, ambiguous) | 100% |
 | Abstained when it shouldn't | 2%–5% |
-| Answer repaired after the grounding check | 5%–7% |
+| Answer repaired after the grounding check | 3%–7% |
 | Accepted answer still ungrounded | 0% |
 | Ran out of steps | 0% |
 | Required sources touched (routing recall) | 89%–92% |
@@ -25,7 +25,7 @@ Run `20261115-163812_qa_dev_TX_eval_eval_v1`: 60 questions × 3 repeat(s); model
 
 Failures (repeat 0): decoy: false_abstention ×1, decoy: wrong_value ×2, multi_hop: failed ×2
 
-Model calls 487 (487 live, 0 cached); tokens 541,673 in / 98,897 out; cost $0.04; wall 485s.
+Model calls 486 (28 live, 458 cached); tokens 51,486 in / 10,156 out; cost $0.00; wall 252s.
 
 ## Where the failures come from
 
@@ -41,4 +41,4 @@ Failures over 3 repeat(s): 17. agent 8, graph 9.
 | graph | multi_hop | a listed provider is split in the graph | 3 |
 
 
-Agent prompt and verifier were frozen on a separate 60-question tuning set (no shared providers) before this run; tuning-set pass rate 97% over 3 repeats.
+Agent prompt and verifier were frozen on a separate 60-question tuning set (no shared providers); tuning-set pass rate 97% over 3 repeats.

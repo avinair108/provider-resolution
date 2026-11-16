@@ -110,7 +110,17 @@ def main() -> None:
     parser.add_argument("--state", default="TX")
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--tag", default="")
+    parser.add_argument("--thresholds-from", help="a dev run dir under runs/: score with its thresholds instead of choosing "
+                                                  "them here (required on the held-out split)")
     args = parser.parse_args()
+    fixed = {}
+    if args.thresholds_from:
+        prior = json.loads((ROOT / "runs" / args.thresholds_from / "summary.json").read_text())
+        if prior["split"] != "dev":
+            raise SystemExit("thresholds must come from a dev run")
+        fixed = {name: (r[0]["pair_threshold"], r[0]["record_threshold"]) for name, r in prior["results"].items()}
+    elif args.split != "dev":
+        raise SystemExit("the held-out split is scored only with thresholds fixed on dev: pass --thresholds-from <dev run>")
 
     base = ROOT / "data" / args.split / args.state
     run_id = datetime.now().strftime("%Y%m%d-%H%M%S") + f"_matching_{args.split}_{args.state}" + (f"_{args.tag}" if args.tag else "")
@@ -124,7 +134,7 @@ def main() -> None:
     for name, columns in BASELINES.items():
         t = time.time()
         candidates.exact_baseline(con, name, columns)
-        results[name] = [score(con, name)]
+        results[name] = [score(con, name, *fixed.get(name, (None, None)))]
         timings[name] = round(time.time() - t, 1)
         print(f"{name}: {results[name][0]['records']['focus']['overall']}", flush=True)
     results["splink"] = []
@@ -134,10 +144,11 @@ def main() -> None:
         (out / f"model_{seed}.json").write_text(json.dumps(info["model"], indent=2))
         if seed == 0:
             con.execute(f"COPY splink TO '{out / 'splink_0.parquet'}' (FORMAT parquet)")
-        results["splink"].append(score(con, "splink"))
+        results["splink"].append(score(con, "splink", *fixed.get("splink", (None, None))))
         timings[f"splink_{seed}"] = round(time.time() - t, 1)
         print(f"splink seed {seed} ({timings[f'splink_{seed}']}s): {results['splink'][-1]['records']['focus']['overall']}", flush=True)
     summary = {"run_id": run_id, "split": args.split, "state": args.state, "repeats": args.repeats,
+               "thresholds_from": args.thresholds_from,
                "input_records": counts, "timings_s": timings, "results": results}
     (out / "summary.json").write_text(json.dumps(summary, indent=2, default=str))
     (out / "report.md").write_text(to_markdown(json.loads(json.dumps(summary, default=str))))

@@ -117,10 +117,13 @@ def main() -> None:
     parser.add_argument("--effort", help="override the profile's reasoning effort (low | medium | high)")
     parser.add_argument("--max-cost", type=float, help="dollar cap for this run's live calls (default: the profile's)")
     parser.add_argument("--workers", type=int, default=1, help="parallel requests; keep 1 on rate-limited free tiers")
+    parser.add_argument("--final", action="store_true", help="the one run on the held-out split, with the frozen method")
     parser.add_argument("--tag", default="")
     args = parser.parse_args()
-    if args.split != "dev":
-        raise SystemExit("Phase 4 tunes on dev only; the held-out state is scored once the method is frozen.")
+    if args.split != "dev" and not args.final:
+        raise SystemExit("Phase 4 tunes on dev only; score the held-out state once, with the method frozen, using --final.")
+    if args.final and args.subset != "all":
+        raise SystemExit("--final scores the whole held-out band: use --subset all")
 
     baseline = ROOT / "runs" / args.baseline if args.baseline else sorted((ROOT / "runs").glob(f"*_matching_{args.split}_{args.state}_baseline"))[-1]
     base_summary = json.loads((baseline / "summary.json").read_text())

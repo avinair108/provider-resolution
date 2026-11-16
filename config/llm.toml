@@ -1,4 +1,8 @@
 # Model profiles. Code picks one by name: LLM.from_config("default"). Keys live in .env, never here.
+
+[budget]
+# Total spend allowed on the project's OpenRouter account, all runs together. Each run is capped at what's left.
+project_cap_usd = 20.0
 # Switching provider later means adding an adapter in llm/providers/ and a profile here; callers don't change.
 
 [default]
