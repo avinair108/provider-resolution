@@ -13,6 +13,7 @@ import hashlib
 import json
 import threading
 import time
+import tomllib
 from concurrent.futures import ThreadPoolExecutor
 from collections import Counter
 from datetime import datetime
@@ -35,7 +36,7 @@ def _rows(con, table: str, ids: list[str]) -> dict[str, dict]:
 
 
 def adjudicate(llm: LLM, item: dict, source_row: dict, candidate_rows: dict, sample: int, show_scores: bool,
-               order: str = "shuffled", repair: bool = True) -> dict:
+               order: str = "shuffled", repair: bool = True, system: str = prompt.SYSTEM) -> dict:
     """One record. repair=False is the no-verifier ablation: the first reply stands unless it's unusable (bad JSON
     or a choice that isn't on the list); contradictions with the records are recorded but not acted on."""
     user, mapping = prompt.render(item, source_row, candidate_rows, sample=sample, show_scores=show_scores, order=order)
@@ -43,7 +44,7 @@ def adjudicate(llm: LLM, item: dict, source_row: dict, candidate_rows: dict, sam
            "cached": True, "input_tokens": 0, "output_tokens": 0}
     message, verdict = user, None
     for attempt in range(2 if repair else 1):  # the first answer, then at most one repair
-        response = llm.complete(llm.request(user=message, system=prompt.SYSTEM, json=True, sample=sample))
+        response = llm.complete(llm.request(user=message, system=system, json=True, sample=sample))
         out["attempts"] += 1
         out["cached"] &= response.cached
         out["input_tokens"] += response.input_tokens
@@ -149,6 +150,8 @@ def main() -> None:
     overrides = {**({"max_cost_usd": args.max_cost} if args.max_cost is not None else {}),
                  **({"effort": args.effort} if args.effort else {})}
     llm = LLM.from_config(args.profile, **overrides)
+    prompt_name = tomllib.loads((ROOT / "config" / "llm.toml").read_text())[args.profile].get("prompt", "full")
+    system = prompt.SYSTEMS[prompt_name]  # "compact" only for a model fine-tuned on it
     all_decisions, stop = {}, threading.Event()
     stopped = None
     t0 = time.time()
@@ -162,7 +165,7 @@ def main() -> None:
         cands = {c["registry"]: registry[c["registry"]] for c in item["candidates"]}
         try:
             decision = adjudicate(llm, item, sources[item["record_id"]], cands, sample, args.show_scores,
-                                  order=args.order, repair=not args.no_repair)
+                                  order=args.order, repair=not args.no_repair, system=system)
         except (QuotaExhausted, BudgetExceeded) as e:
             with lock:
                 if not stop.is_set():
@@ -204,7 +207,7 @@ def main() -> None:
 
     summary = {"run_id": run_id, "baseline": baseline.name, "split": args.split, "state": args.state, "subset": args.subset,
                "band": args.band, "profile": args.profile,
-               "prompt_sha": hashlib.sha256(prompt.SYSTEM.encode()).hexdigest()[:12], "show_scores": args.show_scores, "order": args.order,
+               "prompt": prompt_name, "prompt_sha": hashlib.sha256(system.encode()).hexdigest()[:12], "show_scores": args.show_scores, "order": args.order,
                "repair": not args.no_repair, "effort": llm.defaults.get("effort"), "repeats": args.repeats,
                "n_band": len(items), "stopped": stopped, "thresholds": {"record": record_t, "pair": pair_t},
                "llm": llm.summary(), "workers": args.workers, "wall_s": round(time.time() - t0, 1),

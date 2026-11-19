@@ -25,6 +25,7 @@ Texas figures are on the 1,909 band records held back from all tuning; Californi
 | Supervised classifier | 95.1% | 89.1% | 91.3% | 81.5% |
 | + gpt-oss-120b, Groq, low effort | 95.4–95.6% | 92.7–93.1% | – | – |
 | + Claude Haiku 5.5, low effort | 95.0–95.9% | 93.3–94.0% | – | – |
+| + GLM 5.3 Flash, untuned, low effort (Fireworks) | 95.6–96.0% | 93.2–93.7% | – | – |
 | **+ gpt-oss-120b, Groq, medium effort (frozen)** | **96.4–96.6%** | **94.0–94.8%** | **93.6–94.2%** | **89.9–90.2%** |
 
 - The adjudicator fixes about 7 of Splink's errors for every one it breaks in Texas (155–159 fixed, 14–16 broken per
@@ -35,6 +36,10 @@ Texas figures are on the 1,909 band records held back from all tuning; Californi
   LLM is still clearly ahead on the band itself, most of all across non-cardiologist records.
 - The same open model scored about a point higher on Groq than on DeepInfra at full precision (95.4–95.6% vs
   94.3–94.8%, non-overlapping over 3 repeats), so each profile pins one host.
+
+- An untuned GLM 5.3 Flash comes within about 10 errors of the frozen method statewide (218–224 vs 209–213 on Texas
+  cardiologists' records) at half the cost ($1.01 vs $2.10). A fine-tuned version was trained but couldn't be served
+  affordably; see [docs/finetuning.md](../docs/finetuning.md).
 
 ## Ablations (Texas tuning split, gpt-oss-120b on Groq)
 
@@ -76,7 +81,7 @@ shared providers (97%) and frozen before either reported run.
 
 ## Cost
 
-About $11.70 of model calls over the whole project (OpenRouter), including every ablation and model comparison. The final
+About $11.70 of model calls on OpenRouter plus $5.41 on Fireworks (fine-tuning experiment) over the whole project, including every ablation and model comparison. The final
 frozen pipeline costs about $1.20 per 1,000 band records adjudicated (3,000 decisions with 3 repeats) and under a
 cent per question answered.
 

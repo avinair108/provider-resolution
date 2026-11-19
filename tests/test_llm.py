@@ -265,3 +265,23 @@ def test_project_cap_lowers_the_run_cap_and_stops_at_zero():
     assert project_capped(3.0, FakeProvider(), {"project_cap_usd": 20}) == 3.0  # provider can't report spend
     with pytest.raises(BudgetExceeded, match="project cap"):
         project_capped(3.0, Account(20.0), {"project_cap_usd": 20})
+
+
+def test_fireworks_spend_counts_usage_and_training_against_its_own_cap(tmp_path):
+    import json as _json
+    from llm.client import project_capped
+    from llm.providers.fireworks import FireworksProvider
+    from llm.types import BudgetExceeded
+    usage, ledger = tmp_path / "usage.jsonl", tmp_path / "ledger.jsonl"
+    usage.write_text("\n".join(_json.dumps(r) for r in [
+        {"provider": "fireworks", "cost_usd": 0.5}, {"provider": "openrouter:groq", "cost_usd": 4.0}]) + "\n")
+    ledger.write_text(_json.dumps({"job": "sft", "cost_usd": 4.0}) + "\n")
+    fw = FireworksProvider("k", usage_log=usage, ledger=ledger)
+    assert fw.credit()["account_used"] == 4.5  # OpenRouter spend not counted here
+    budget = {"project_cap_usd": 20.0, "fireworks_cap_usd": 10.0}
+    assert project_capped(2.0, fw, budget) == 2.0
+    assert project_capped(None, fw, budget) == 5.5
+    ledger.write_text(_json.dumps({"job": "sft", "cost_usd": 9.6}) + "\n")
+    import pytest
+    with pytest.raises(BudgetExceeded):
+        project_capped(1.0, fw, budget)

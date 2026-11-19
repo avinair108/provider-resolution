@@ -36,6 +36,14 @@ Reply with a JSON object only:
  "reason": "<one short sentence>"}
 Evidence compares the source with your chosen candidate; leave it empty for "none"."""
 
+# For a model fine-tuned on the task: the instructions above are learned from examples, so it gets the output
+# contract only. Saves ~550 tokens per call, at training and at inference.
+SYSTEM_COMPACT = """Match the SOURCE provider record to the CANDIDATE registry record that is the same individual, or "none". \
+Reply with a JSON object only: {"choice": "<letter or none>", "confidence": <0 to 1>, \
+"evidence": [{"field": ..., "relation": "same|compatible|different|missing"}], "reason": "<short>"}"""
+
+SYSTEMS = {"full": SYSTEM, "compact": SYSTEM_COMPACT}
+
 
 @cache
 def _taxonomy_names() -> dict[str, str]:

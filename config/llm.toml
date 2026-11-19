@@ -3,6 +3,8 @@
 [budget]
 # Total spend allowed on the project's OpenRouter account, all runs together. Each run is capped at what's left.
 project_cap_usd = 20.0
+# Fireworks (training plus the fine-tuned model), counted locally from the usage log and the training ledger.
+fireworks_cap_usd = 10.0
 # Switching provider later means adding an adapter in llm/providers/ and a profile here; callers don't change.
 
 [default]
@@ -98,5 +100,36 @@ max_live_calls = 20000
 max_cost_usd = 2.0
 price_input_per_mtok = 0.15
 price_output_per_mtok = 0.60
+cache_dir = ".cache/llm"
+usage_log = ".cache/llm/usage.jsonl"
+
+# Fireworks: GLM 5.3 Flash, the base for the fine-tuned adjudicator. Serverless; no idle cost.
+# ft-glm-base is the untuned model with the full prompt (the fair zero-shot comparison); ft-glm is the LoRA with the
+# compact prompt it was trained on. Set ft-glm's model to accounts/<account>/models/<adapter> once training is done.
+[ft-glm-base]
+provider = "fireworks"
+model = "accounts/fireworks/models/glm-5p3-flash"
+prompt = "full"
+temperature = 0.0
+max_tokens = 2048
+effort = "low"
+max_live_calls = 20000
+max_cost_usd = 1.5
+price_input_per_mtok = 0.15
+price_output_per_mtok = 0.50
+cache_dir = ".cache/llm"
+usage_log = ".cache/llm/usage.jsonl"
+
+[ft-glm]
+provider = "fireworks"
+model = "accounts/ACCOUNT/models/ADAPTER"
+prompt = "compact"
+temperature = 0.0
+max_tokens = 512
+effort = "low"
+max_live_calls = 20000
+max_cost_usd = 1.5
+price_input_per_mtok = 0.15
+price_output_per_mtok = 0.50
 cache_dir = ".cache/llm"
 usage_log = ".cache/llm/usage.jsonl"

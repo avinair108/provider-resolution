@@ -137,3 +137,16 @@ def test_no_repair_keeps_a_contradicted_first_answer():
     assert d["status"] == "decided" and d["registry"] == "np_b" and d["attempts"] == 1 and d["first_contradictions"]
     d = adjudicate(llm, ITEM, SOURCE, ROWS, sample=0, show_scores=False, order="splink", repair=True)
     assert d["status"] == "fallback" and d["attempts"] == 2
+
+
+def test_finetune_targets_pass_the_verifier():
+    import json as _json
+    from adjudicate import verify
+    from finetune.prepare import target
+    src = {"last_name": "SMITH", "first_name": "BOB", "middle_name": "J", "city": "AUSTIN", "zip": "787011234"}
+    cand = {"last_name": "SMITH", "first_name": "ROBERT", "middle_name": "K", "practice_city": "DALLAS", "practice_zip": "75201"}
+    reply = _json.loads(target("B", src, cand))
+    v = verify.check(reply, {"A": "np_1", "B": "np_2"}, src, {"np_1": {}, "np_2": cand})
+    assert v.ok and v.choice == "B" and {e["field"] for e in reply["evidence"]} >= {"last_name", "city"}
+    none = _json.loads(target("none", src, None))
+    assert verify.check(none, {"A": "np_1"}, src, {"np_1": cand}).ok and none["evidence"] == []

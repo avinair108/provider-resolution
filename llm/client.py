@@ -26,8 +26,9 @@ def project_capped(run_cap: float | None, provider, budget: dict) -> float | Non
     """The run's dollar cap, lowered to what's left of the project cap ([budget] project_cap_usd in config/llm.toml).
 
     Spent-so-far comes from the provider's account (OpenRouter /credits), so it counts every run, past and parallel,
-    not only this process. A provider that can't report spend (free tiers, the fake) leaves the run cap as it is."""
-    cap = budget.get("project_cap_usd")
+    not only this process. A provider that can't report spend (free tiers, the fake) leaves the run cap as it is.
+    A provider with its own budget_key (Fireworks: fireworks_cap_usd, counted locally) is held to that cap instead."""
+    cap = budget.get(getattr(provider, "budget_key", "project_cap_usd"))
     credit = getattr(provider, "credit", None)
     if cap is None or credit is None:
         return run_cap
